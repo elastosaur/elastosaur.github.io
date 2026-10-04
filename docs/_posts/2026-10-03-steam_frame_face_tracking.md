@@ -6,6 +6,17 @@ comments: true
 
 ![Face tracking working in VRChat!](/assets/face_vr.png)
 
+# Hardware
+
+What you'll need:
+ - USB webcam (I used the unobtanium [Vive Facial Tracker](https://docs.vrcft.io/docs/hardware/addons/vive/face-tracker), but any should work)
+ - A way to mount it (many 3d-printable mounts are online, I used [this one](https://www.printables.com/model/1859624-steam-frame-vive-tracker-mount-front-with-babble)
+ - USB hub with PD input, if you want to charge or use a power bank while playing (I used [this one](https://www.anker.com/products/a8365)). Currently mounted with zip-ties, will eventually figure out a better way :')
+
+![Picture of my hardware setup](/assets/frame_hardware_1.png)
+
+# Software
+
 ## Summary
 
 Linux is Linux, so things should just work! BUT! We have a few holes to plug. The root filesystem is read-only, and there are very few drivers shipped by default. Also, Baballonia needs to be built from source, to get a proper arm64 build with all the permissions.
