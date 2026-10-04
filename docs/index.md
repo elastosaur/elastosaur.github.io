@@ -1,10 +1,8 @@
 ---
+layout: default
 ---
 
-# This is a main page
-
-
-### Posts
+## All posts
 
 {% for post in site.posts %}
   - [{{ post.title }}]({{ post.url}})
