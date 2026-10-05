@@ -6,12 +6,18 @@ comments: true
 
 ![Face tracking working in VRChat!](/assets/face_vr.png)
 
+# Background
+
+I assume you have at least some experience with Linux, are comfortable with command line tools, and can set up the [ssh access](https://partner.steamgames.com/doc/steamhardware/steamframe/debugging#3) to your frame. With that, let's get started!
+
 # Hardware
 
 What you'll need:
  - USB webcam (I used the unobtanium [Vive Facial Tracker](https://docs.vrcft.io/docs/hardware/addons/vive/face-tracker), but any should work)
  - A way to mount it (many 3d-printable mounts are online, I used [this one](https://www.printables.com/model/1859624-steam-frame-vive-tracker-mount-front-with-babble)
  - USB hub with PD input, if you want to charge or use a power bank while playing (I used [this one](https://www.anker.com/products/a8365)). Currently mounted with zip-ties, will eventually figure out a better way :')
+
+Note: I've since switched to the [Smallrig USB hub](https://www.smallrig.com/eu/USB-C-Hub-4-in-1-PD-USB-C-3-1-USB-C-2-0-with-Audio-Adapter-4598.html) - smaller, and easier to mount. One caveat - Vive Facial tracker does not work plugged into the USB 2.0 ports directly due to some weird USB-C signalling I'm yet to learn about - but it does, if you use a C-to-A and A-to-C adapters in-between. Yay :D
 
 ![Picture of my hardware setup](/assets/frame_hardware_1.png)
 
@@ -165,7 +171,6 @@ sudo insmod ./drivers/media/usb/uvc/uvcvideo.ko
 dmesg will show the camera being found at this point, hopefully. Make sure it's plugged in! :D
 
 
-
 ## Baballonia
 
 
@@ -198,6 +203,12 @@ Make a launch script for baballonia: `~/bin/baballonia`
 
 # TODO: auto-detect the camera and update the baballonia settings
 # TODO: auto-detect steam streaming host and update the IP in settings?
+
+# Need to reload the modules we've built after reboot, so do it here, why not
+# I haven't found a way to do this persistently in a reliable way yet, not 100% sure what gets erased during OS update
+# using run0 to get a graphical prompt on desktop, but still being able to work in terminal too
+DRIVERS="$HOME/linux-6.18.0/drivers"
+run0 modprobe "$DRIVERS"/media/{common/{videobuf2/videobuf2-vmalloc,uvc},usb/uvc/uvcvideo}.ko
 
 "$HOME/Baballonia/src/Baballonia.Desktop/bin/Release/net10.0/linux-arm64/Baballonia.Desktop"
 ```
