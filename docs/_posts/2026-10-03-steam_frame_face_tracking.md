@@ -91,84 +91,106 @@ sudo apt build-dep linux
 ## Building the kernel module for the uvc camera
 Valve, plz ship the kernel sources and/or the common modules, this took waaaay too long to figure out
 
-```
-git clone --depth 1 https://github.com/torvalds/linux.git -b v6.18 linux-6.18.0
-cd linux-6.18.0
 
-# run this if retrying
-make distclean
-```
-
-Edit the makefile to make the kernel name match:
-
-```diff
---- EXTRAVERSION =
-+++ EXTRAVERSION = -ge66bc2ca6f8c
-```
-Adjust the suffix if the new kernel was relelased.
-Check that the versions match:
-```
-make kernelversion
-uname -r
-```
-
-In `tools/lib/bpf/Makefile`, around line 87, after all `override CFLAGS`, add another one:
-```
-# override CFLAGS += -Wno-error=discarded-qualifiers
-```
-This was needed to fix a build error due to a newer GCC version for me.
-
-Now get the valve kernel headers:
+Here's a script to get and build the kernel modules; read and try to understand it before running :)
 
 ```bash
-headers_url=$(sudo pacman -Spdd linux-618-deckard-headers)
-echo "$headers_url"
-wget "$headers_url" ../headers.pkg.tar.zst
+#!/bin/bash
+
+# uncomment print everything being done
+#set -x
+# exit on error
+set -e
+
+KERNEL_PKG=linux-618-deckard-headers
+KERNEL_VERSION=6.18.0
+KERNEL_COMMIT=refs/tags/v6.18
+
+fork_to_distrobox() {
+  HEADERS_URL=$(pacman -Spdd $KERNEL_PKG)
+  distrobox enter --root rarch -- $0 "$HEADERS_URL"
+  exit 0
+}
+
+test -n "$1" || fork_to_distrobox
+
+test -e headers.pkg.tar.zst || wget "$1" -O headers.pkg.tar.zst
+
+# hiding .git to prevent the "-dirty" suffix added to the kernel version
+test -d linux-$KERNEL_VERSION || (
+  git clone --depth 1 --revision=$KERNEL_COMMIT https://github.com/torvalds/linux.git linux-$KERNEL_VERSION
+  mv linux-$KERNEL_VERSION/.git linux-$KERNEL_VERSION/git-old
+  override CFLAGS += -Wno-error=discarded-qualifiers
+)
+
+pushd linux-$KERNEL_VERSION
+
+
+# uncomment to re-build everything
+#make distclean
+
+zcat /proc/config.gz | sed -e 's/^# CONFIG_MEDIA_USB_SUPPORT is not set$/CONFIG_MEDIA_USB_SUPPORT=y\n\
+CONFIG_USB_VIDEO_CLASS=m\n\
+CONFIG_UVC_COMMON=m\n\
+CONFIG_VIDEOBUF2_VMALLOC=m/' > .config
+
+tar --strip-components=5 -xf ../headers.pkg.tar.zst usr/lib/modules/$(uname -r)/build/Module.symvers
+
+# HOSTCFLAGS is a workaround for a newer GCC version being used
+MAKE_ARGS="LOCALVERSION=$(uname -r | sed s/^$KERNEL_VERSION//) HOSTCFLAGS=-Wno-error=discarded-qualifiers"
+
+make $MAKE_ARGS olddefconfig
+make $MAKE_ARGS modules_prepare
+make $MAKE_ARGS -C . M=drivers/media/common
+cat drivers/media/common/Module.symvers >> Module.symvers # Don't ask
+make $MAKE_ARGS -C . M=drivers/media/usb/uvc
+
+
+popd
+
 ```
 
-Extract somewhere
-
-```bash
-mkdir ../headers/
-tar xf ../headers.pkg.tar.zst ../headers/
-```
-
-Ready to build the kernel modules.
-
-```bash
-cp ../headers/usr/lib/modules/$(uname -r)/build/Module.symvers ./
-make menuconfig
-```
-Save and exit
-```bash
-zcat /proc/config.gz > .config
-make menuconfig
-```
-
-Device Drivers -> Multimedia support -> Media drivers -> Media USB Adapters (toggle) -> USB Video Class (toggle to M)
-General setup -> Automatically append version informatio nto the version string -> toggle off
-
-Exit -> save to .config
-
-```bash
-make scripts
-make prepare
-make modules_prepare
-
-make -C . M=drivers/media/common
-cat drivers/media/common/Module.symvers >> Module.symvers # don't ask
-make -C . M=drivers/media/usb/uvc
-```
+Run the script *outsite* the distrobox.
 
 If everything went well, modules will be compatible. If not, you'll get errors from `insmod` below.
 
 ```bash
-sudo insmod ./drivers/media/common/videobuf2/videobuf2-vmalloc.ko
-sudo insmod ./drivers/media/common/uvc.ko
-sudo insmod ./drivers/media/usb/uvc/uvcvideo.ko
+cd linux-6.18.0/drivers/media
+
+sudo insmod ./common/videobuf2/videobuf2-vmalloc.ko
+sudo insmod ./common/uvc.ko
+sudo insmod ./usb/uvc/uvcvideo.ko
 ```
 
 dmesg will show the camera being found at this point, hopefully. Make sure it's plugged in! :D
+
+If modules work, let's install them, and make them load when the system boots.
+
+```bash
+cd linux-6.18.0/drivers/media
+MOD_DIR=/lib/modules/$(uname -r)/kernel/drivers/media
+
+sudo steamos-readonly disable
+
+sudo mkdir -p $MOD_DIR/common/videobuf2/
+sudo mkdir -p $MOD_DIR/usb/uvc
+
+sudo cp common/videobuf2/videobuf2-vmalloc.ko $MOD_DIR/common/videobuf2/
+sudo cp common/uvc.ko $MOD_DIR/common/
+sudo cp usb/uvc/uvcvideo.ko $MOD_DIR/usb/uvc/
+sudo depmod
+
+# autoload uvcvideo
+echo 'uvcvideo' | sudo tee /etc/modprobe.d/90-uvcvideo.conf
+
+# keep the autoload when the system updates
+echo '/etc/modprobe.d/90-uvcvideo.conf' | sudo tee /etc/atomic-update.conf.d/90-uvcvideo-modprobe.conf
+
+sudo steamos-readonly enable
+
+```
+
+OS update will remove them, but that's ok since we will most likely need to rebuild and reinstall them anyway. Make sure to do this if the OS updates!
 
 
 ## Baballonia
@@ -203,12 +225,6 @@ Make a launch script for baballonia: `~/bin/baballonia`
 
 # TODO: auto-detect the camera and update the baballonia settings
 # TODO: auto-detect steam streaming host and update the IP in settings?
-
-# Need to reload the modules we've built after reboot, so do it here, why not
-# I haven't found a way to do this persistently in a reliable way yet, not 100% sure what gets erased during OS update
-# using run0 to get a graphical prompt on desktop, but still being able to work in terminal too
-DRIVERS="$HOME/linux-6.18.0/drivers"
-run0 modprobe "$DRIVERS"/media/{common/{videobuf2/videobuf2-vmalloc,uvc},usb/uvc/uvcvideo}.ko
 
 "$HOME/Baballonia/src/Baballonia.Desktop/bin/Release/net10.0/linux-arm64/Baballonia.Desktop"
 ```
