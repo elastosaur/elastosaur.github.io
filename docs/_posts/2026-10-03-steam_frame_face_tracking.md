@@ -181,10 +181,10 @@ sudo cp usb/uvc/uvcvideo.ko $MOD_DIR/usb/uvc/
 sudo depmod
 
 # autoload uvcvideo
-echo 'uvcvideo' | sudo tee /etc/modprobe.d/90-uvcvideo.conf
+echo 'uvcvideo' | sudo tee /etc/modules-load.d/90-uvcvideo.conf
 
 # keep the autoload when the system updates
-echo '/etc/modprobe.d/90-uvcvideo.conf' | sudo tee /etc/atomic-update.conf.d/90-uvcvideo-modprobe.conf
+echo '/etc/modules-load.d/90-uvcvideo.conf' | sudo tee /etc/atomic-update.conf.d/90-uvcvideo-modules-load.d.conf
 
 sudo steamos-readonly enable
 
