@@ -223,8 +223,16 @@ Make a launch script for baballonia: `~/bin/baballonia`
 ```bash
 #!/bin/bash
 
-# TODO: auto-detect the camera and update the baballonia settings
 # TODO: auto-detect steam streaming host and update the IP in settings?
+
+# auto-detect the camera path and update the settings to use it
+CFG="$HOME/.config/ProjectBabble/ApplicationData/LocalSettings.json"
+CAM="$(v4l2-ctl --list-devices | grep -A1 '^HTC Multimedia Camera' | tail -n 1 | tr -d ' \t')"
+if [ -z "$CAM" ]; then
+  echo "Camera not found!"
+  exit 1
+fi
+jq ".LastOpenedFaceCamera=\"$CAM\"" "$CFG" > "$CFG.tmp" && mv "$CFG.tmp" "$CFG"
 
 "$HOME/Baballonia/src/Baballonia.Desktop/bin/Release/net10.0/linux-arm64/Baballonia.Desktop"
 ```
